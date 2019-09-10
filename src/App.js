@@ -1,49 +1,57 @@
 import React from 'react';
-import { Navbar, NavDropdown, Nav, Modal, Button, Form, BlockQuote, Card } from 'react-bootstrap';
+import {
+  Navbar,
+  Modal,
+  Button,
+  Form,
+  Card,
+} from 'react-bootstrap';
 import GoogleMapReact from 'google-map-react';
+import {
+  getAllLocations,
+  addLocation,
+  addLocationReview,
+} from './api/lambda';
 
 const getDifference = (a, b) => Math.abs(a - b);
 
-const findNearestPlace = (keyValueStore, selectedLat, selectedLng) => {
-  let placeObject;
-  let placeKey;
+const findNearestLocation = (locations, selectedLat, selectedLng) => {
+  let locationObject;
   let previousDistance;
 
-  Object.keys(keyValueStore).forEach((key) => {
-    const thisElement = keyValueStore[key];
-    const currentLatitude = thisElement.pos.lat;
-    const currentLongitude = thisElement.pos.lng;
+  locations.forEach((location) => {
+    const currentLatitude = location.pos.lat;
+    const currentLongitude = location.pos.lng;
 
     const x = getDifference(currentLatitude, selectedLat);
     const y = getDifference(currentLongitude, selectedLng);
 
-    const x_squared = Math.pow(x, 2);
-    const y_squared = Math.pow(y, 2);
-    const d_squared = x_squared + y_squared;
-    const currentDistance = Math.sqrt(d_squared);
+    const xSquared = x ** 2;
+    const ySquared = y ** 2;
+    const dSquared = xSquared + ySquared;
+    const currentDistance = Math.sqrt(dSquared);
 
     if (previousDistance == null || currentDistance < previousDistance) {
-      placeObject = thisElement;
-      placeKey = key;
+      locationObject = location;
       previousDistance = currentDistance;
     }
   });
 
-  return [placeObject, placeKey];
+  return locationObject;
 };
 
 const calculateRating = (placeObject) => {
-  const stars = placeObject.reviews.map(review => review.stars);
+  const stars = placeObject.reviews.map((review) => review.stars);
 
   stars.sort((a, b) => a - b);
 
-  let half = Math.floor(stars.length / 2);
+  const half = Math.floor(stars.length / 2);
 
   if (stars.length % 2) {
     return stars[half];
   }
 
-  return ((stars[half-1] + stars[half]) / 2.0)
+  return ((stars[half - 1] + stars[half]) / 2.0);
 };
 
 const Place = ({ text }) => (
@@ -51,9 +59,7 @@ const Place = ({ text }) => (
     style={{
       color: 'red',
       fontSize: 16,
-      fontWeight: 'bold',
-      padding: 4,
-      backgroundColor: 'green',
+      borderLeft: 'solid 1px green',
     }}
   >
     {text}
@@ -61,80 +67,62 @@ const Place = ({ text }) => (
 );
 
 class App extends React.Component {
-  state = {
-    showPlace: false,
-    selectedPlace: [],
-    selectedPlaceKey: '',
-    showNewPlace: false,
-    keyValueStore: {
-      'Location 1': {
-        name: 'Location 1',
-        username: 'SimZor',
-        description: 'Nice place much wow',
-        pos: {
-          lat: 59.342838,
-          lng: 18.037861,
-        },
-        reviews: [
-          {
-            username: 'Test Person 2',
-            text: 'Nice place',
-            stars: 1,
-          },
-          {
-            username: 'Test Person 1',
-            text: 'Nice place much wow',
-            stars: 3,
-          },
-        ],
-      },
-    },
-    reviewText: '',
-    reviewUsername: '',
-    reviewStars: 0,
-    newLocationUsername: '',
-    newLocationName: '',
-    newLocationDescription: '',
-    newLocationLatitude: 0,
-    newLocationLongitude: 0,
-    showReviewForm: true,
-  };
+  constructor(props) {
+    super(props);
 
-  static defaultProps = {
-    center: {
-      lat: 59.342838,
-      lng: 18.037861,
-    },
-    zoom: 14,
-  };
+    this.state = {
+      showPlace: false,
+      selectedLocation: null,
+      showNewPlace: false,
+      locations: [],
+      reviewText: '',
+      reviewUsername: '',
+      reviewStars: 0,
+      newLocationUsername: '',
+      newLocationName: '',
+      newLocationDescription: '',
+      showReviewForm: true,
+    };
+  }
 
-  handleSubmitReview = (event) => {
+  handleSubmitReview = async (event) => {
     event.preventDefault(); // Don't reload page
 
     this.setState({ showReviewForm: false });
 
     const {
-      keyValueStore,
+      selectedLocation,
       reviewText,
       reviewUsername,
       reviewStars,
-      selectedPlaceKey,
     } = this.state;
 
-    keyValueStore[selectedPlaceKey].reviews.push({
+    selectedLocation.reviews.push({
       username: reviewUsername,
       stars: reviewStars,
       text: reviewText,
     });
 
-    this.setState({ reviewText: '', reviewUsername: '', reviewStars: '' });
+    const response = await addLocationReview(
+      selectedLocation.location_id,
+      reviewUsername,
+      reviewText,
+      reviewStars,
+    );
+    console.log(await response.json());
+
+    this.setState({
+      reviewText: '',
+      reviewUsername: '',
+      reviewStars: '',
+    });
   };
 
-  handleSubmitLocation = (event) => {
+  handleSubmitLocation = async (event) => {
     event.preventDefault(); // Don't reload page
 
     const {
-      keyValueStore,
+      locations,
       newLocationName,
       newLocationUsername,
       newLocationDescription,
@@ -142,8 +130,8 @@ class App extends React.Component {
       currentLongitude,
     } = this.state;
 
-    keyValueStore[newLocationName] = {
-      name: newLocationName,
+    const newLocation = {
+      location_id: newLocationName,
       username: newLocationUsername,
       description: newLocationDescription,
       reviews: [],
@@ -153,38 +141,57 @@ class App extends React.Component {
       },
     };
 
+    locations.push(newLocation);
+
+    const response = await addLocation(
+      newLocationName,
+      newLocationDescription,
+      newLocationUsername,
+      currentLongitude,
+      currentLatitude,
+    );
+    console.log(await response.json());
+
     this.setState({
       showNewPlace: false,
       newLocationName: '',
-      newLocationUusername: '',
+      newLocationUsername: '',
       newLocationDescription: '',
     });
   };
 
-  onClick = ({x, y, lat, lng, event}) => {
-    const { keyValueStore } = this.state;
+  onClick = ({ lat, lng }) => {
+    const { locations } = this.state;
     const fixedLat = parseFloat(lat).toFixed(6);
     const fixedLng = parseFloat(lng).toFixed(6);
-    const nearestPlace = findNearestPlace(keyValueStore, lat, lng);
+    const nearestLocation = findNearestLocation(locations, lat, lng);
 
     this.setState({
       showReviewForm: true,
       currentLatitude: fixedLat,
       currentLongitude: fixedLng,
       showPlace: true,
-      selectedPlace: nearestPlace,
-      selectedPlaceKey: nearestPlace[1],
+      selectedLocation: nearestLocation,
     });
   };
 
-  handleChange = (event) => this.setState({ [event.target.id]: event.target.value });
+  handleChange = (event) => this.setState({ [event.target.id]: event.target.value });
+
+  componentDidMount = async () => {
+    try {
+      const response = await getAllLocations();
+      const result = await response.json();
+
+      const locations = result.Items;
+      this.setState({ locations });
+    } catch {};
+  }
 
   render = () => {
     const {
       showPlace,
       showNewPlace,
-      selectedPlace,
-      keyValueStore,
+      selectedLocation,
       reviewUsername,
       reviewStars,
       reviewText,
@@ -192,10 +199,15 @@ class App extends React.Component {
       newLocationName,
       newLocationDescription,
       showReviewForm,
+      locations,
     } = this.state;
 
-    const placeObject = selectedPlace ? selectedPlace[0] : null;
-    const placeObjectRating = placeObject ? calculateRating(placeObject) : 0;
+    const {
+      center,
+      zoom,
+    } = this.props;
+
+    const selectedLocationRating = selectedLocation ? calculateRating(selectedLocation) : 0;
 
     return (
       <>
@@ -212,7 +224,9 @@ class App extends React.Component {
             fontSize: 10,
           }}
         >
-          För att lägga till ett ställe, klicka på kartan där du vill lägga till stället. En popup kommer upp med närmaste restaurang, men om det inte redan finns en där du klickade så använder du knappen "Lägg till ett ställe på dessa koordinater".
+          För att lägga till ett ställe, klicka på kartan där du vill lägga till stället.
+          En popup kommer upp med närmaste restaurang, men om det inte redan finns en där
+          du klickade så använder du knappen &quot;Lägg till ett ställe på dessa koordinater&quot;.
         </div>
         <Navbar expand="lg" style={{ backgroundColor: '#e5393c', zIndex: 99 }}>
           <Navbar.Brand style={{ color: 'white' }}>
@@ -221,9 +235,13 @@ class App extends React.Component {
         </Navbar>
         <Modal show={showPlace} onHide={() => this.setState({ showPlace: false })}>
           <Modal.Header closeButton>
-            <Modal.Title style={{ fontSize: 18 }}>
-              {`Närmaste ställe där du klickade: ${selectedPlace[1]}`}
-            </Modal.Title>
+            {
+              selectedLocation ? (
+                <Modal.Title style={{ fontSize: 18 }}>
+                  {`Närmaste ställe där du klickade: ${selectedLocation.location_id}`}
+                </Modal.Title>
+              ) : null
+            }
           </Modal.Header>
           <Modal.Body>
             <Button
@@ -233,28 +251,32 @@ class App extends React.Component {
                 width: '100%',
                 backgroundColor: 'transparent',
                 border: '1px solid red',
-                color: 'red'
+                color: 'red',
               }}
               onClick={() => this.setState({ showNewPlace: true, showPlace: false })}
             >
               Lägg till ett ställe på dessa koordinater
             </Button>
             <hr />
-            <h6 style={{ lineHeight: 2 }}>
-              {`${selectedPlace[1]}`}
-            </h6>
-            { placeObject ? (
+            {
+              selectedLocation ? (
+                <h6 style={{ lineHeight: 2 }}>
+                  {`${selectedLocation.location_id}`}
+                </h6>
+              ) : null
+            }
+            {
+              selectedLocation ? (
                 <ul style={{ listStyleType: 'none', marginLeft: 0, paddingLeft: 0 }}>
-                  <li>{`Skapad av ${placeObject.username}`}</li>
+                  <li>{`Skapad av ${selectedLocation.username}`}</li>
                   <li>
                     Betyg&nbsp;
                     {
                       [1, 2, 3, 4, 5].map((currentStar, idx) => {
-                        if (currentStar <= placeObjectRating) {
+                        if (currentStar <= selectedLocationRating) {
                           return <span key={idx.toString()}>&#9733;</span>;
-                        } else {
-                          return <span key={idx.toString()}>&#9734;</span>;
                         }
+                        return <span key={idx.toString()}>&#9734;</span>;
                       })
                     }
                   </li>
@@ -262,11 +284,11 @@ class App extends React.Component {
               ) : null
             }
             <p>
-              {placeObject ? placeObject.description : null}
+              {selectedLocation ? selectedLocation.description : null}
             </p>
             <hr />
-            <h6 style={{ lineHeight: 2 }}>
-              {`Lägg till omdöme för ${selectedPlace[1]}`}
+            <h6 style={{ lineHeight: 2 }}>
+              {`Lägg till omdöme för ${selectedLocation}`}
             </h6>
             {
               showReviewForm ? (
@@ -320,13 +342,17 @@ class App extends React.Component {
               ) : <div>Omdöme tillagt</div>
             }
             <hr />
-            <h6 style={{ lineHeight: 2 }}>
-              {`Omdömen för ${selectedPlace[1]}`}
-            </h6>
             {
-              placeObject
+              selectedLocation ? (
+                <h6 style={{ lineHeight: 2 }}>
+                  {`Omdömen för ${selectedLocation.location_id}`}
+                </h6>
+              ) : null
+            }
+            {
+              selectedLocation
                 ? (
-                  selectedPlace[0].reviews.map((review, idx) => (
+                  selectedLocation.reviews.map((review, idx) => (
                     <Card style={{ marginBottom: 10 }} key={idx.toString()}>
                       <Card.Header>Omdöme</Card.Header>
                       <Card.Body>
@@ -336,12 +362,12 @@ class App extends React.Component {
                           </p>
                           <div style={{ marginBottom: 10 }}>
                             {
-                              [1, 2, 3, 4, 5].map((currentStar, idx) => {
+                              [1, 2, 3, 4, 5].map((currentStar, starIdx) => {
                                 if (currentStar <= review.stars) {
-                                  return <span key={idx.toString()}>&#9733;</span>;
-                                } else {
-                                  return <span key={idx.toString()}>&#9734;</span>;
+                                  return <span key={starIdx.toString()}>&#9733;</span>;
                                 }
+
+                                return <span key={starIdx.toString()}>&#9734;</span>;
                               })
                             }
                           </div>
@@ -420,23 +446,19 @@ class App extends React.Component {
         >
           <GoogleMapReact
             bootstrapURLKeys={{ key: 'AIzaSyDQFrXqYl2PUGGjB0avqnIouVPpO5Rq_TY' }}
-            defaultCenter={this.props.center}
-            defaultZoom={this.props.zoom}
+            defaultCenter={center}
+            defaultZoom={zoom}
             onClick={this.onClick}
           >
             {
-              Object.keys(keyValueStore).map(key => {
-                const place = keyValueStore[key];
-
-                return (
-                  <Place
-                    key={key}
-                    lat={place.pos.lat}
-                    lng={place.pos.lng}
-                    text={key}
-                  />
-                );
-              })
+              locations.map((location) => (
+                <Place
+                  key={location.location_id}
+                  lat={location.pos.lat}
+                  lng={location.pos.lng}
+                  text={location.location_id}
+                />
+              ))
             }
           </GoogleMapReact>
         </div>
@@ -444,5 +466,15 @@ class App extends React.Component {
     );
   }
 }
+
+App.propTypes = {};
+
+App.defaultProps = {
+  center: {
+    lat: 59.342838,
+    lng: 18.037861,
+  },
+  zoom: 14,
+};
 
 export default App;
