@@ -85,7 +85,7 @@ def add_location(event, context):
         dynamo_payload = json.loads(json_util.dumps(payload))
 
         response = client.put_item(
-            TableName='t5guide_locations',
+            TableName=TABLE_NAME,
             Item=dynamo_payload,
         )
 
