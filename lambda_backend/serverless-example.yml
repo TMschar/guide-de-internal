@@ -1,0 +1,46 @@
+service: guide-de-internal-lambda
+app: guide-de-internal-lambda-app
+org: simzor
+
+plugins:
+  - serverless-python-requirements
+
+custom:
+  pythonRequirements:
+    dockerizePip: non-linux
+
+provider:
+  name: aws
+  runtime: python3.7
+  stage: dev
+  region: eu-north-1
+  environment:
+    APP_AWS_ACCESS_KEY_ID: key_id
+    APP_AWS_SECRET_ACCESS_KEY: access_key
+    DYNAMO_DB_TABLE_NAME: table_name
+
+functions:
+  get_all_locations:
+    handler: handler.get_all_locations
+    events:
+      - http:
+          path: locations
+          method: get
+  get_location:
+    handler: handler.get_location
+    events:
+      - http:
+          path: location
+          method: get
+  post_location:
+    handler: handler.add_location
+    events:
+      - http:
+          path: location
+          method: post
+  add_review:
+    handler: handler.add_review
+    events:
+      - http:
+          path: location/reviews
+          method: post
