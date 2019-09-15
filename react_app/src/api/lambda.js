@@ -45,10 +45,6 @@ export const addLocation = (
     process.env.REACT_APP_ADD_LOCATION_ENDPOINT,
     {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
       body: JSON.stringify({
         location_name: name,
         description,
@@ -72,10 +68,6 @@ export const addLocationReview = (
       { location_id: locationId },
     ), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
       body: JSON.stringify({
         username,
         text,

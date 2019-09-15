@@ -41,17 +41,17 @@ const findNearestLocation = (locations, selectedLat, selectedLng) => {
 };
 
 const calculateRating = (placeObject) => {
-  const stars = placeObject.reviews.map((review) => review.stars);
+  const reviewsCount = placeObject.reviews.length;
+  let total = 0;
 
-  stars.sort((a, b) => a - b);
+  placeObject.reviews.forEach((review) => {
+    total += parseInt(review.stars, 10);
+  });
 
-  const half = Math.floor(stars.length / 2);
+  let rating = total / reviewsCount;
+  rating = rating.toFixed(0);
 
-  if (stars.length % 2) {
-    return stars[half];
-  }
-
-  return ((stars[half - 1] + stars[half]) / 2.0);
+  return rating;
 };
 
 const Place = ({ text }) => (
@@ -103,13 +103,12 @@ class App extends React.Component {
       text: reviewText,
     });
 
-    const response = await addLocationReview(
+    await addLocationReview(
       selectedLocation.location_id,
       reviewUsername,
       reviewText,
       reviewStars,
     );
-    console.log(await response.json());
 
     this.setState({
       reviewText: '',
@@ -143,14 +142,17 @@ class App extends React.Component {
 
     locations.push(newLocation);
 
-    const response = await addLocation(
-      newLocationName,
-      newLocationDescription,
-      newLocationUsername,
-      currentLongitude,
-      currentLatitude,
-    );
-    console.log(await response.json());
+    try {
+      await addLocation(
+        newLocationName,
+        newLocationDescription,
+        newLocationUsername,
+        currentLongitude,
+        currentLatitude,
+      );
+    } catch (error) {
+      throw error;
+    }
 
     this.setState({
       showNewPlace: false,
@@ -184,7 +186,9 @@ class App extends React.Component {
 
       const locations = result.Items;
       this.setState({ locations });
-    } catch {};
+    } catch (error) {
+      throw error;
+    }
   }
 
   render = () => {
@@ -287,9 +291,13 @@ class App extends React.Component {
               {selectedLocation ? selectedLocation.description : null}
             </p>
             <hr />
-            <h6 style={{ lineHeight: 2 }}>
-              {`Lägg till omdöme för ${selectedLocation}`}
-            </h6>
+            {
+              selectedLocation ? (
+                <h6 style={{ lineHeight: 2 }}>
+                  {`Lägg till omdöme för ${selectedLocation.location_id}`}
+                </h6>
+              ) : null
+            }
             {
               showReviewForm ? (
                 <Form style={{ marginBottom: 20 }} onSubmit={this.handleSubmitReview}>
